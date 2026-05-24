@@ -61,3 +61,23 @@ Key lesson:
 - Seeing the `source_file` and `chunk_index` confirms whether the system is retrieving context from the correct document.
 - For the query asking about Buffon's Needle, the highest-ranked retrieved chunks came from `04-buffons-needle.md`, which is the expected behaviour.
 - Some lower-ranked chunks may come from unrelated files when `k` is larger, so choosing an appropriate number of retrieved chunks matters.
+
+## Day 3 — Recursive chunking and structure-aware splitting
+
+Implemented:
+
+- Replaced the original fixed-size word chunker with a recursive chunker
+- The chunker now tries to split text using natural document structure:
+  - paragraphs first
+  - then sentences
+  - then newlines
+  - then fixed-size word chunks as a fallback
+- Added overlap between neighbouring chunks so important context is not lost at chunk boundaries
+- Adjusted the raw chunk size to `chunk_size - overlap` so that adding overlap does not push the final chunks above the target chunk size
+
+Key lesson:
+
+- Chunking quality has a direct effect on retrieval quality.
+- Fixed-size word chunking is simple, but it can split important explanations, equations, or definitions at awkward points, causing the model to miss important context.
+- Recursive chunking keeps related content together where possible by preferring paragraph and sentence boundaries before falling back to word-based splitting.
+- Overlap helps preserve context between neighbouring chunks, especially when an explanation continues across a chunk boundary.
