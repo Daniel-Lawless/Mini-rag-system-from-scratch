@@ -1,5 +1,7 @@
 import numpy as np
 import logging
+import json
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,6 @@ class VectorDB:
         # Construct record
         record = {
             "chunk" : chunk,
-            "embedding" : embedding,
             "metadata" : {
                 "source_file" : source_file,
                 "chunk_index" : chunk_index
@@ -40,7 +41,79 @@ class VectorDB:
 
         # A new embedding was added, so the matrix is out of date. Hence, it needs to be rebuilt. 
         self._matrix_needs_rebuild = True
-    
+
+    # Adds persistant storage
+    def save(self, path: Path) -> None:
+
+        # Makes the directory represented by dir_path. 
+        # parents=True means if any parent directories are missing, create those too.
+        # So if neither folder exists: storage/index then Python creates storage/ then create storage/index/
+        # exist_ok=True means if this directory already exists, then fine, don't crash.
+        path.mkdir(parents=True, exist_ok=True)
+
+        # Creates path objects to the chunks and embeddings files. 
+        # Note, the / operator is special for Path objects. It joins paths and creates another path object.
+        chunks_path = path / "chunks.jsonl"
+        embeddings_path = path / "embeddings.npy"
+
+        # Adds each chunk to the chunks.jsonl file. write mode overwrites the file if it is already made.
+        with chunks_path.open("w", encoding="utf-8") as file:
+            for record in self.records:
+                json_line = json.dumps(record) # Converts a Python dict into a json object.
+                file.write(json_line + "\n")
+        
+        # Save the embeddings as an embedding matrix.
+        # turns our embedding list into a 2d matrix
+        self._rebuild_embedding_matrix()
+
+        # If we do not have an embedding matrix, save an empty array.
+        if self.embeddings_matrix is None:
+            np.save(embeddings_path, np.array([]))
+        # else save the embedding matrix.
+        else:
+            np.save(embeddings_path, self.embeddings_matrix)
+
+        logger.info("Chunks saved to %s | Embeddings saved to %s",
+                    chunks_path,
+                    embeddings_path
+                    )
+        
+    def load(self, path: Path) -> None:
+
+        # File paths
+        chunks_path = path / "chunks.jsonl"
+        embeddings_path = path / "embeddings.npy"
+
+        # Reset database
+        self.records = []
+        self.embeddings = []
+        self.embeddings_matrix = None
+
+        logger.info("Loading records and embeddings...")
+
+        # Convert each json "dict" in chunks.jsonl to a Python dict and add it to our records.  
+        with chunks_path.open("r", encoding="utf-8") as file:
+            for line in file:
+                record = json.loads(line)
+                self.records.append(record)
+        
+        # Load matrix from embeddings.npy
+        loaded_matrix = np.load(embeddings_path)
+
+        # If the file is empty
+        if (loaded_matrix.size == 0):
+            self.embeddings_matrix = None
+            self.embeddings = []
+        # else set matrix equal to the loaded matrix and populate embeddings.
+        else:
+            self.embeddings_matrix = loaded_matrix
+            self.embeddings = [row for row in self.embeddings_matrix]
+
+        # Matrix is already loaded, so no need to rebuild
+        self._matrix_needs_rebuild = False
+
+        logger.info("records and embeddings loaded.")
+
     def _rebuild_embedding_matrix(self) -> None:
 
         # If the matrix does not need to be rebuilt, just return.
@@ -87,6 +160,3 @@ class VectorDB:
             (float(similarities[index]), self.records[int(index)])
             for index in top_k_indices
         ]
-                 
-
-

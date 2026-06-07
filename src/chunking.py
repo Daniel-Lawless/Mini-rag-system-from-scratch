@@ -8,7 +8,8 @@ class Chunking:
         if overlap < 0:
             raise ValueError("Overlap cannot be negative")
 
-        # Preserve paragraph/newline structure for recursive splitting.
+        # Only removes white spaces from the beginning and end,
+        # so it preserves paragraph/newline structure for recursive splitting.
         text = text.strip()
 
         if not text:
