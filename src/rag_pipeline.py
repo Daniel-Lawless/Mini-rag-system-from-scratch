@@ -5,7 +5,7 @@ from openai import OpenAI
 from pathlib import Path
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -120,11 +120,33 @@ if __name__ == "__main__":
     # Specify the path to the directory that contains the data we want to store in our vector DB.
     data_dir = Path("data")
 
-    # For each file in this directory, read its contents and index it. This populates our database.
-    for file in sorted(data_dir.glob("*.md")):
-        logger.info(f"Indexing {file.name}...")
-        text = file.read_text(encoding = "utf-8")
-        rag_pipeline.index_text(text, source_file = file.name)
+    # Specify the path to the files that contain saved chunks and embeddings.
+    index_dir = Path("storage/index")
+    chunks_path = index_dir / "chunks.jsonl"
+    embeddings_path = index_dir / "embeddings.npy"
+
+    # If a previous saved state exists, load that state.
+    if (chunks_path.exists() 
+        and embeddings_path.exists()
+        # checks if the files are non-empty, i.e., if it has more than 0 bytes.
+        and chunks_path.stat().st_size > 0
+        and embeddings_path.stat().st_size > 0):
+
+        logger.info("Saved state exists. Loading previous state. ")
+        vector_db.load(index_dir) 
+
+    # Else create that state and save it for next time.
+    else:
+        logger.info("No previous state found. Creating new state:")
+        # For each file in this directory, read its contents and index it. This populates our database.
+        for file in sorted(data_dir.glob("*.md")):
+            logger.info(f"Indexing {file.name}...")
+            text = file.read_text(encoding = "utf-8") # Returns the entire file as a Python string
+            rag_pipeline.index_text(text, source_file = file.name)
+
+        # Save this state.
+        vector_db.save(index_dir)
+        logger.info("New state created.")
 
     # Once the DB is populated, return the models response.
     answer = rag_pipeline.response("What is the German Tank Problem?", 10)
