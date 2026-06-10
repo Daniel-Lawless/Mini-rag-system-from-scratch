@@ -21,7 +21,7 @@ class IndexManager:
         self.embedder = embedder
         self.chunker = chunker
 
-    # Populates the vector_search
+    # Populates vector_search
     def index_text(self, text: str, source_file: str) -> None:
 
         # Split data into chunks

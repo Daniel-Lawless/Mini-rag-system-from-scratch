@@ -12,8 +12,8 @@ class HybridSearch:
     # Default behaviour is standard RRF
     def __init__(
             self,
-            vector_search: VectorSearch,
-            keyword_search: KeywordSearch,
+            vector_search: VectorSearch, # Assumes to already be populated
+            keyword_search: KeywordSearch, # Assumes to already be populated
             embedder: Embeddings,
             vector_weight: float = 1,
             keyword_weight: float = 1,
@@ -31,6 +31,7 @@ class HybridSearch:
         metadata = record["metadata"]
         return (metadata["source_file"], metadata["chunk_index"])
     
+    # Used to populte fused results dictionary
     def _add_ranked_results(
             self,
             fused_results: dict[tuple[str,int], dict[str,Any]],
