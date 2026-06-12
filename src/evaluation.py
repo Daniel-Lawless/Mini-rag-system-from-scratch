@@ -288,27 +288,8 @@ class RetrievalEvaluator:
 
         logger.info("Evaluation complete")
 
-def configure_logging() -> None:
-    logging.basicConfig(level=logging.INFO)
-
-    noisy_loggers = [
-        "vector_search",
-        "keyword_search",
-        "hybrid_search",
-        "sentence_transformers",
-        "httpx",
-        "httpcore",
-        "huggingface_hub",
-        "transformers",
-    ]
-
-    for logger_name in noisy_loggers:
-        logging.getLogger(logger_name).setLevel(logging.WARNING)
-
 if __name__ == "__main__":
     configure_logging()
 
-    evaluator = RetrievalEvaluator(k=4)
-    evaluator.run()
     evaluator = RetrievalEvaluator(k=4)
     evaluator.run()
