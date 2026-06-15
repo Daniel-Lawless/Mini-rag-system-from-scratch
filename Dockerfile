@@ -8,6 +8,10 @@ WORKDIR /app
 # directory
 COPY requirements.txt .
 
+# Controls where the image looks for the index
+# When running api.py
+ENV INDEX_PATH=/app/storage/index
+
 # Install dependencies in the image. This is done first because
 # docker caches in layers. Our dependencies change less often than
 # our code, so Docker can reuse the installed dependency layer 
@@ -27,4 +31,5 @@ EXPOSE 8000
 # This lets the container know where the index is.
 CMD ["uvicorn", "api:app", "--app-dir", "/app/src", "--host", "0.0.0.0", "--port", "8000"]
 # Runs uvicorn api:app --app-dir /app/src --host 0.0.0.0 --port 8000 on start up
-# --app-dir /app/src tells uvicorn to look inside this directory when trying to import api
+# --app-dir /app/src tells uvicorn to look inside this directory in the container to when trying
+# to import api

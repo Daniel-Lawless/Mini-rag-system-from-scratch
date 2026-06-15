@@ -1,5 +1,6 @@
 from typing import Literal
 from pathlib import Path
+import os
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -13,11 +14,13 @@ from rag_pipeline import RAGPipeline
 # Create the API application
 app = FastAPI(title="Mini RAG system API")
 
+INDEX_PATH = Path(os.getenv("INDEX_PATH", "storage/index"))
+
 # initialising these objects only happens at startup time.
 # They do not get reloaded with each request.
 embedder = Embeddings()
-vector_search = VectorSearch.from_index(index_path=Path("storage/index"))
-keyword_search = KeywordSearch.from_jsonl(index_path=Path("storage/index"))
+vector_search = VectorSearch.from_index(index_path=INDEX_PATH)
+keyword_search = KeywordSearch.from_jsonl(index_path=INDEX_PATH)
 hybrid_search = HybridSearch(
     vector_search=vector_search,
     keyword_search=keyword_search,
