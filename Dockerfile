@@ -4,9 +4,6 @@ FROM python:3.12-slim
 # Create working directory in the container
 WORKDIR /app
 
-# Shows the docker container where api.py is.
-ENV PYTHONPATH=/app/src
-
 # This lets the container know where the index is.
 ENV INDEX_PATH=/app/storage/index
 
@@ -29,4 +26,6 @@ COPY src ./src
 EXPOSE 8000
 
 # This command runs when the container starts
+# Shows the docker container where api.py is.
+# This lets the container know where the index is.
 CMD ["uvicorn", "api:app", "--app-dir", "/app/src", "--host", "0.0.0.0", "--port", "8000"]
