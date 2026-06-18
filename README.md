@@ -1,111 +1,343 @@
 # Mini RAG System From Scratch
 
-This project is a Retrieval-Augmented Generation system built from scratch in Python.
+A Retrieval-Augmented Generation system built from scratch in Python for querying my own mathematical statistics and probability derivation notes.
 
-The motivation for the project came from a real problem I was facing. I had started creating a portfolio of mathematical statistics and probability derivations using Excalidraw's Math Preview, but as the number of derivations grew, it became harder to quickly find the exact derivation, explanation, or pattern I was looking for and the site started to become slow on startup.
+This project started as a learning exercise in RAG fundamentals, but developed into a more complete mini ML/LLM systems project with:
+
+* recursive chunking
+* vector search
+* BM25 keyword search
+* hybrid retrieval with Reciprocal Rank Fusion
+* persistent index storage
+* retrieval evaluation
+* automated tests
+* GitHub Actions CI
+* FastAPI serving
+* Docker support
+* AWS deployment test using ECR, ECS/Fargate, and S3
+
+The project was intentionally built mostly from scratch rather than using a full RAG framework such as LangChain. The goal was to understand how the core pieces of a RAG system work internally.
+
+---
+
+## Motivation
+
+The motivation for this project came from a real problem I was facing.
+
+I had started creating a portfolio of mathematical statistics and probability derivations using Excalidraw's Math Preview. As the number of derivations grew, it became harder to quickly find the exact derivation, explanation, or pattern I was looking for.
 
 Rather than manually searching through my derivations, I wanted to build a system that could retrieve the most relevant parts of my notes and use an LLM to answer questions about them.
 
-Recognizing this was a retrieval problem, I decided to build a mini RAG pipeline that indexes my own derivations, embeds them, stores them in a vector database, retrieves the most relevant chunks using cosine similarity, and passes that context into an LLM to generate answers.
+Recognising this as a retrieval problem, I built a mini RAG system that:
+
+* indexes my own derivation notes
+* splits them into chunks
+* embeds each chunk
+* stores the index persistently
+* retrieves relevant chunks using vector, keyword, or hybrid search
+* passes the retrieved context into an LLM to generate grounded answers
+
+---
 
 ## Knowledge Base
 
-This project uses my separate statistics derivation repository as its knowledge base: [Statistics for AI](https://github.com/Daniel-Lawless/Statistics-for-ai)
+This project uses my separate statistics derivation repository as its knowledge base:
 
-That repository contains my original human-readable derivation notes, written in Markdown. The notes cover probability and statistics problems relevant to AI and machine learning, such as the Lighthouse Problem, Buffon's Needle, the German Tank Problem, the Coupon Collector Problem, the Secretary Problem, and inverse-variance weighting.
+[Statistics for AI](https://github.com/Daniel-Lawless/Statistics-for-ai)
 
-For this RAG system, I keep a processed copy of those notes inside the `data/` directory. The files in that directory are based on the original notes, but are adapted slightly for retrieval. For instance, I added short descriptions around diagrams and images so that the RAG system can understand the meaning of them without needing OCR or image-processing capabilities.
+That repository contains my original human-readable derivation notes, written in Markdown. The notes cover probability and statistics problems relevant to AI and machine learning, including:
+
+* Lighthouse Problem
+* Buffon's Needle
+* German Tank Problem
+* Coupon Collector Problem
+* Secretary Problem
+* inverse-variance weighting
+* maximum likelihood estimation
+* other statistics and machine learning topics
+
+For this RAG system, I keep a processed copy of those notes inside the `data/` directory. The files are based on the original notes, but are adapted slightly for retrieval. For example, I added short text descriptions around diagrams and images so that the RAG system can understand their meaning without needing OCR or image-processing capabilities.
+
+---
 
 ## What I Built
 
-I built a small Retrieval-Augmented Generation pipeline from scratch in Python for querying my own mathematical statistics derivation notes. The project was intentionally built from scratch instead of using a full RAG framework, so that I could understand how chunking, embeddings, vector search, retrieval, and prompt construction work.
+I built a Retrieval-Augmented Generation pipeline from scratch in Python for querying my own mathematical statistics derivation notes.
 
-The system takes Markdown files from the `data/` directory, splits them into overlapping chunks, embeds each chunk, stores the chunks in a vector database, retrieves the top-k most relevant chunks for a user query, and passes those chunks into an LLM to generate an answer.
+The system takes Markdown files from the `data/` directory, splits them into overlapping chunks, embeds each chunk, stores the chunks and metadata in a persistent index, retrieves the most relevant chunks for a user query, and passes those chunks into an LLM to generate an answer.
 
-The main components are:
+A high-level overview of the system is as follows:
 
-- **Recursive chunking**  
-  The system aims to split the Markdown notes using natural document structure where possible. It tries to split by paragraphs first, then sentences, then newlines, before falling back to fixed-size word chunks. This helps keep related explanations, equations, and definitions together.
+<div align="center">
 
-- **Chunk overlap**  
+<pre align="center">
+Markdown notes
+↓
+Recursive chunking
+↓
+Embedding generation
+↓
+Persistent index storage
+↓
+Vector / keyword / hybrid retrieval
+↓
+Prompt construction
+↓
+LLM response generation
+</pre>
+
+</div>
+
+---
+
+## Core Features
+
+* **Recursive chunking**
+
+  The system splits Markdown notes using natural document structure where possible. It first tries to split by paragraphs, then sentences, then newlines, before falling back to fixed-size word chunks. This helps keep related explanations, equations, and definitions together.
+
+* **Chunk overlap**
+
   Each chunk can include words from the previous chunk. This helps preserve context when an explanation continues across a chunk boundary.
 
-- **SentenceTransformer embeddings**  
-  Each chunk is converted into a vector embedding using a SentenceTransformer model. The embeddings are normalized so cosine similarity can be calculated using a dot product, making search more efficient.
+* **Metadata-aware indexing**
 
-- **In-memory vector database**  
-  The vector database stores each chunk as a record containing the chunk text, its embedding, and metadata such as the source file and chunk index.
+  Each indexed chunk stores its text, source file, and chunk index. This makes retrieval easier to inspect and debug because each result can be traced back to the original Markdown file.
 
-- **Metadata-aware retrieval**  
-  Retrieved chunks include their source file and chunk index. This makes the system easier to debug because I can see where each retrieved piece of context came from.
+* **Persistent index storage**
 
-- **Vectorized similarity search**  
-  Instead of looping through every embedding one by one, the system stacks all chunk embeddings into a NumPy matrix and calculates all query-to-chunk similarities at once using matrix multiplication, making retrieval faster and easier to scale than a manual Python loop.
+  The system saves indexed records to `records.jsonl` and embeddings to `embeddings.npy`. This means the index can be loaded again later without rebuilding the whole corpus every time.
 
-- **Efficient top-k retrieval**  
-  The system uses `np.argpartition()` to find the top-k most similar chunks without fully sorting every similarity score.
+* **Normalised embeddings**
 
-- **LLM response generation**  
-  The retrieved chunks are combined into a context window and passed to an OpenAI model. The model is instructed to answer using only the retrieved context, and to say when the answer is not available in the provided notes.
+  Text is embedded using an embedding model, then each embedding is normalised. This allows cosine similarity to be calculated efficiently using a dot product.
+  
+* **Vector search**
 
-Overall, the project implements the core stages of a RAG system:
+  The vector retriever embeds the user query and compares it against the saved chunk embeddings. It returns the chunks with the highest similarity scores.
 
-```text
-Data -> Chunking -> Embeddings -> Vector database -> Similarity search -> Top-k retrieval -> Prompt construction -> LLM response
-```
+* **Vectorised NumPy search**
 
-## Example Query:
+  Instead of comparing embeddings one by one, the system stacks all chunk embeddings into a NumPy matrix. Search is then performed using matrix multiplication, making retrieval much faster.
 
-Example question 1:
+* **BM25 keyword search**
+
+  The keyword retriever uses BM25 scoring to find chunks that contain important query terms. It considers term frequency, document frequency, and chunk length to rank keyword matches.
+
+* **Hybrid retrieval**
+
+  The hybrid retriever combines vector search and keyword search using weighted Reciprocal Rank Fusion. This allows the system to benefit from both semantic similarity and exact keyword matching.
+
+* **Adjustable retrieval methods**
+
+  The system supports `vector`, `keyword`, and `hybrid` retrieval. This makes it easy to compare different retrieval strategies from both the CLI and API.
+
+* **Command-line interface**
+
+  The CLI supports indexing, asking questions, clearing indexes, and choosing the retrieval method. It can also rebuild indexes locally or upload them to S3.
+
+* **S3 index support**
+
+  The system can store and load indexes from AWS S3. This makes the project more deployment-friendly because the API can download the index at startup instead of relying only on local files.
+
+* **FastAPI interface**
+
+  The API exposes a `/query` endpoint that accepts a question, retrieval method, and number of chunks to retrieve. It returns the generated answer along with the retrieved source files and chunk indexes.
+
+* **Grounded answer generation**
+
+  Retrieved chunks are combined into a context block and passed to the language model. The model is instructed to answer the query using only the retrieved context. If the answer is not present in the context, it is instructed to say it does not know.
+
+* **Retrieval evaluation**
+
+  The project includes an evaluation script that compares vector, keyword, and hybrid retrieval. It calculates metrics such as
+  * `hit@k`
+  * `precision@k`
+  * `correct_source_count@k`
+  * `mean_reciprocal_rank@k`
+    
+  It saves this data into JSON files: `results.json` and `per_question_results.json`. These can be used to see which retriever is performing best on the provided questions in     `questions.json`.
+
+---
+
+## Architecture
+
+<div align="center">
+
+<pre align="center">
+data/
+Markdown knowledge base
+↓
+Chunking
+↓
+Embeddings
+↓
+IndexManager
+↓
+records.jsonl + embeddings.npy
+↓
+VectorSearch / KeywordSearch / HybridSearch
+↓
+RAGPipeline
+↓
+OpenAI LLM response
+↓
+CLI or FastAPI
+</pre>
+
+</div>
+
+---
+
+## Example Queries
+
+### Buffon's Needle
+
+Example query:
 
 ```text
 What is the final probability for Buffon's Needle?
 ```
 
-The system will embed this query and will retrieve the k most relevant chunks from the notes, including their source file and chunk index, then passes that retrieved context into the LLM to generate an answer. We can see from the output that the chunks with the highest similarity to my query are from `04_Buffons_Needle.md`, which is what we expect, since this file contains information about the Buffon's Needle problem. This example shows the RAG pipeline retrieving information from the Buffon's Needle derivation and using it to answer the question from the provided context:
+The system retrieves chunks from the Buffon's Needle notes and uses the retrieved context to answer the question.
 
-![Example RAG output for Buffon's Needle](assets/RAG_System_Buffon's_Needle_Prompt.png)
+<p align="center">
+  <img src="assets/RAG_System_Buffon's_Needle_Prompt.png" alt="Example RAG output for Buffon's Needle" width="1050">
+</p>
 
-Example Question 2:
+---
+
+### German Tank Problem
+
+Example query:
 
 ```text
 What is the German Tank Problem?
 ```
 
-Similarly the system will embed this query and will retrieve the k most relevant chunks from the notes. We can see from the output that the chunks with the highest similarity come from the source file `05_german_tank_problem.md`, which is what we expect, since this file contains information about the German Tank Problem. 
+The system retrieves chunks from the German Tank Problem notes and uses the retrieved context to answer the question.
 
-Example output:
+<p align="center">
+  <img src="assets/RAG_System_German_Tank_Prompt.png" alt="Example RAG output for the German Tank Problem" width="1050">
+</p>
 
-![Example RAG output for The German Tank Problem](assets/RAG_System_German_Tank_Prompt.png)
+---
 
-## What I Learned
+## API Example
 
-Building this project helped me understand the core parts of a RAG system from first principles.
+The FastAPI application exposes a `/query` endpoint.
 
-Some of the main things I learned were:
+Example request:
 
-- **RAG is mostly a retrieval problem**  
-  The final answer is only useful if the retriever finds the right context. Improving chunking and retrieval quality often matters more than changing the LLM.
+```json
+{
+  "query": "Why does the lighthouse problem produce a Cauchy distribution?",
+  "retriever": "hybrid",
+  "k": 4
+}
+```
 
-- **Chunking has a large effect on answer quality**  
-  Fixed-size chunks are simple, but they can split explanations or equations in awkward places. Recursive chunking helped preserve more of the original document structure, which helped preserve context.
+Example deployed API response from Swagger UI:
 
-- **Overlap helps preserve context**  
-  Adding overlap between chunks reduces the chance that important information is lost when an explanation crosses a chunk boundary.
+<p align="center">
+  <img src="assets/Deployment-swagger-query-response.png" alt="Deployment Swagger query response" width="1050">
+</p>
 
-- **Normalized embeddings simplify cosine similarity**  
-  By normalizing each embedding, cosine similarity can be calculated using a dot product.
+---
 
-- **Metadata makes retrieval easier to debug**  
-  Storing the source file and chunk index for each chunk made it much easier to check whether the system was retrieving the correct notes.
+## Deployment Evidence
 
-- **Vectorization improves retrieval efficiency**  
-  Stacking embeddings into a NumPy matrix allows the system to compare a query against every chunk using one matrix multiplication instead of looping through each embedding.
+### Docker image pushed to ECR
 
-- **RAG data needs to be machine-readable**  
-  My original derivation notes were written for humans, but the RAG version needed extra text descriptions around diagrams so the system could understand them without OCR or image processing.
+<p align="center">
+  <img src="assets/ECR-image.png" alt="Docker image in AWS ECR" width="1050">
+</p>
 
-## How to Run
+---
+
+### ECS task running
+
+<p align="center">
+  <img src="assets/ECS-running-task.png" alt="ECS running task" width="1050">
+</p>
+
+---
+
+### Application startup and request logs
+
+<p align="center">
+  <img src="assets/logs-showing-app-startup-and-requests.png" alt="Application logs showing startup and requests" width="1050">
+</p>
+
+---
+
+### Saved index in S3
+
+<p align="center">
+  <img src="assets/s3_saved_index.png" alt="Saved RAG index in S3" width="1050">
+</p>
+
+---
+
+## Project Structure
+
+```text
+Mini-rag-system-from-scratch/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── assets/
+│   └── project screenshots and diagrams
+├── data/
+│   └── processed Markdown knowledge base
+├── eval/
+│   └── retrieval evaluation questions and results
+├── notes/
+│   └── development notes and progress log
+├── src/
+│   ├── api.py
+│   ├── chunking.py
+│   ├── cli.py
+│   ├── embeddings.py
+│   ├── evaluation.py
+│   ├── hybrid_search.py
+│   ├── index_loader.py
+│   ├── index_manager.py
+│   ├── keyword_search.py
+│   ├── logging_config.py
+│   ├── rag_pipeline.py
+│   └── vector_search.py
+├── tests/
+│   ├── test_chunking.py
+│   ├── test_hybrid_search.py
+│   ├── test_index_manager.py
+│   ├── test_keyword_search.py
+│   └── test_vector_search.py
+├── Dockerfile
+├── README.md
+└── requirements.txt
+```
+
+---
+
+## Tech Stack
+
+* Python
+* NumPy
+* OpenAI API
+* FastAPI
+* Pydantic
+* Uvicorn
+* Pytest
+* GitHub Actions
+* Docker
+* AWS ECR
+* AWS ECS/Fargate
+* AWS S3
+
+---
+
+## How to Run Locally
 
 ### 1. Clone the repository
 
@@ -114,69 +346,205 @@ git clone https://github.com/Daniel-Lawless/Mini-rag-system-from-scratch.git
 cd Mini-rag-system-from-scratch
 ```
 
+---
+
 ### 2. Create and activate a virtual environment
 
-Linux:
+Linux/macOS:
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
 Windows PowerShell:
-```bash
+
+```powershell
 python -m venv venv
 venv\Scripts\Activate.ps1
 ```
 
+---
+
 ### 3. Install dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
+---
+
 ### 4. Set your OpenAI API key
-On Linux/macOS:
+
+Linux/macOS:
+
 ```bash
 export OPENAI_API_KEY="your_api_key_here"
 ```
 
-On Windows PowerShell:
-```bash
+Windows PowerShell:
+
+```powershell
 $env:OPENAI_API_KEY="your_api_key_here"
 ```
 
-### 5. Run the RAG pipeline
+---
+
+## Run from the CLI
+
+Example hybrid retrieval query:
 
 ```bash
-python src/rag_pipeline.py
+python src/cli.py ask "Why does the lighthouse problem produce a Cauchy distribution?" --retriever hybrid -k 4
 ```
 
-## Limitations and Future Improvements
+Example vector retrieval query:
 
-This project is intentionally simple because the goal was to understand the fundamentals of RAG rather than use a production-ready framework.
+```bash
+python src/cli.py ask "What is the German Tank Problem?" --retriever vector -k 4
+```
 
-Current limitations:
+Example keyword retrieval query:
 
-- The vector database is stored in memory and rebuilt each time the program runs.
-- Embeddings are not currently saved and reloaded from disk.
-- The system only searches over a small local Markdown knowledge base.
-- The system retrieves chunks based only on embedding similarity.
-- Images are not processed directly, so diagrams need textual descriptions in the Markdown files.
+```bash
+python src/cli.py ask "BM25 keyword search" --retriever keyword -k 4
+```
 
-Possible future improvements:
+---
 
-- Save embeddings to disk so the index does not need to be rebuilt every run.
-- Add a command-line interface for asking custom questions.
-- Add tests for chunking, retrieval, and pipeline behaviour.
-- Add source citations to the final generated answer.
-- Compare different chunk sizes, overlap values, and embedding models.
-- Add hybrid search using both keyword search and vector similarity.
+## Run the FastAPI App Locally
 
-## Completed roadmap
+Start the API:
+
+```bash
+uvicorn src.api:app --reload
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Example request body:
+
+```json
+{
+  "query": "What is Buffon's Needle?",
+  "retriever": "hybrid",
+  "k": 4
+}
+```
+
+---
+
+## Run with Docker
+
+Build the Docker image:
+
+```bash
+docker build -t mini-rag-api .
+```
+
+Run the container:
+
+```bash
+docker run --rm -p 8000:8000 -e OPENAI_API_KEY=$OPENAI_API_KEY mini-rag-api
+```
+
+If using a local mounted index:
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  -v $(pwd)/storage/index:/app/storage/index \
+  mini-rag-api
+```
+
+---
+
+## Run Tests
+
+```bash
+pytest
+```
+
+---
+
+## Run Retrieval Evaluation
+
+```bash
+python src/evaluation.py
+```
+
+The evaluation pipeline compares retrieval strategies using:
+
+* vector retrieval
+* keyword retrieval
+* hybrid retrieval
+
+The results are saved as JSON files inside the evaluation output directory.
+
+---
+
+## What I Learned
+
+Building this project helped me understand the core parts of a RAG system from first principles.
+
+The main lessons were:
+
+* RAG quality depends heavily on retrieval quality.
+* Chunking strategy has a large effect on answer quality.
+* Metadata makes retrieval much easier to debug.
+* Normalised embeddings simplify cosine similarity.
+* Vectorised search is much faster and cleaner than looping through records manually.
+* BM25 is useful for exact technical term matching.
+* Hybrid retrieval is more robust than vector or keyword search alone.
+* Retrieval quality should be evaluated with metrics rather than only manual inspection.
+* Tests and CI make the project safer to refactor.
+* Docker and cloud deployment introduce practical engineering concerns beyond the core ML/RAG logic.
+
+---
+
+## Limitations
+
+Current limitations include:
+
+* Images and diagrams are not processed directly.
+* The LLM relies on the retrieved context, so poor retrieval can still lead to weak answers.
+* The project does not currently include a frontend.
+* The agentic RAG layer is planned but not yet implemented.
+
+---
+
+## Future Improvements
+
+Future improvements could be:
+
+* Add an agentic RAG layer for query planning and retrieval strategy selection.
+* Add query rewriting when retrieval results are weak.
+* Add evidence checking before answer generation.
+* Add a small frontend for interacting with the deployed API.
+* Compare different chunk sizes, overlap values, and embedding models.
+
+---
+
+## Completed Roadmap
+
 - [x] Build an in-memory vector database
 - [x] Add cosine similarity search
 - [x] Add chunking with overlap
-- [x] Add SentenceTransformer embeddings
 - [x] Connect retrieved chunks to OpenAI generation
 - [x] Add metadata storage for chunks
 - [x] Improve chunking with paragraph/sentence-aware splitting
-- [x] Vectorize search using NumPy matrix multiplication
+- [x] Vectorise search using NumPy matrix multiplication
+- [x] Add persistent index storage
+- [x] Add command-line interface
+- [x] Add BM25 keyword search
+- [x] Add hybrid retrieval with Reciprocal Rank Fusion
+- [x] Add retrieval evaluation
+- [x] Add Pytest test suite
+- [x] Add GitHub Actions CI
+- [x] Add FastAPI application
+- [x] Add Docker support
+- [x] Test AWS deployment using ECR, ECS/Fargate, and S3
